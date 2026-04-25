@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>OpenClaw Watchdog</title>
+<HTA:APPLICATION 
+    ID="OpenClawWatchdog"
+    BORDER="thick"
+    BORDERSTYLE="normal"
+    CAPTION="yes"
+    MAXIMIZEBUTTON="no"
+    MINIMIZEBUTTON="no"
+    SHOWINTASKBAR="yes"
+    SINGLEINSTANCE="yes"
+    SYSMENU="yes"
+    SCROLL="no"
+/>
+
+<style>
+body { font-family: Arial, sans-serif; background: #667eea; color: white; padding: 20px; user-select: none; }
+.container { background: white; color: black; border-radius: 10px; padding: 30px; max-width: 450px; margin: 0 auto; }
+h1 { color: #667eea; text-align: center; margin-bottom: 30px; }
+.status { background: #38ef7d; padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 25px; }
+.status-label { font-size: 14px; margin-bottom: 10px; }
+.status-value { font-size: 32px; font-weight: bold; }
+.section { margin: 25px 0; }
+.section-title { font-size: 18px; color: #333; border-bottom: 2px solid #667eea; padding-bottom: 8px; margin-bottom: 15px; }
+.buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 15px; }
+button { padding: 15px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+.btn-time { background: #667eea; color: white; }
+.btn-custom { background: #f5576c; color: white; grid-column: span 3; }
+.btn-start { background: #38ef7d; color: white; font-size: 20px; padding: 20px; width: 100%; margin: 20px 0; }
+.btn-exit { background: #f45c43; color: white; width: 100%; padding: 15px; }
+.input-row { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; }
+input[type="number"] { flex: 1; padding: 12px; font-size: 16px; border: 2px solid #ddd; border-radius: 8px; }
+.msg { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; color: black; padding: 30px 50px; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); text-align: center; display: none; z-index: 1000; }
+.msg.show { display: block; }
+</style>
+
+<script language="VBScript">
+Option Explicit
+
+Dim configPath, watchdogPath
+
+Sub Initialize
+    Dim scriptPath, lastSlash
+    scriptPath = window.location.pathname
+    scriptPath = Unescape(scriptPath)
+    If Left(scriptPath, 1) = "/" Then scriptPath = Mid(scriptPath, 2)
+    lastSlash = InStrRev(scriptPath, "\")
+    If lastSlash > 0 Then scriptPath = Left(scriptPath, lastSlash - 1)
+    configPath = scriptPath & "\watchdog_config.txt"
+    watchdogPath = scriptPath & "\kanmengou.bat"
+    LoadConfig
+End Sub
+
+Function GetConfigValue
+    Dim fso, file, line
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    GetConfigValue = "30"
+    If fso.FileExists(configPath) Then
+        Set file = fso.OpenTextFile(configPath, 1)
+        Do While Not file.AtEndOfStream
+            line = file.ReadLine
+            If InStr(line, "CHECK_INTERVAL=") > 0 Then
+                GetConfigValue = Trim(Split(line, "=")(1))
+                Exit Do
+            End If
+        Loop
+        file.Close
+    End If
+End Function
+
+Sub LoadConfig
+    Dim interval
+    interval = GetConfigValue()
+    document.getElementById("currentInterval").innerText = interval & " seconds"
+End Sub
+
+Sub SaveConfig(interval)
+    Dim fso, file
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set file = fso.CreateTextFile(configPath, True)
+    file.WriteLine "# OpenClaw Watchdog Config"
+    file.WriteLine "CHECK_INTERVAL=" & interval
+    file.Close
+    LoadConfig
+    ShowMessage "Set to " & interval & " seconds!"
+End Sub
+
+Sub Set10() SaveConfig(10) End Sub
+Sub Set30() SaveConfig(30) End Sub
+Sub Set60() SaveConfig(60) End Sub
+
+Sub SetCustom
+    Dim val
+    val = document.getElementById("customInput").value
+    If val = "" Or Not IsNumeric(val) Or CInt(val) <= 0 Then
+        ShowMessage "Please enter valid number!"
+        Exit Sub
+    End If
+    SaveConfig CInt(val)
+End Sub
+
+Sub StartWatchdog
+    Dim shell, interval
+    Set shell = CreateObject("WScript.Shell")
+    interval = GetConfigValue()
+    If MsgBox("Start watchdog with " & interval & " seconds interval?", vbYesNo + vbQuestion, "Confirm") = vbYes Then
+        shell.Run """" & watchdogPath & """", 1, False
+        ShowMessage "Watchdog started!"
+    End If
+End Sub
+
+Sub ExitApp
+    If MsgBox("Exit?", vbYesNo + vbQuestion, "Confirm") = vbYes Then
+        window.Close
+    End If
+End Sub
+
+Sub ShowMessage(msg)
+    document.getElementById("msgText").innerText = msg
+    document.getElementById("message").className = "msg show"
+    window.setTimeout "HideMessage()", 2000
+End Sub
+
+Sub HideMessage
+    document.getElementById("message").className = "msg"
+End Sub
+</script>
+</head>
+<body onload="Initialize">
+<div class="container">
+    <h1>OpenClaw Watchdog</h1>
+    
+    <div class="status">
+        <div class="status-label">Current Check Interval</div>
+        <div class="status-value" id="currentInterval">30 seconds</div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">Quick Settings</div>
+        <div class="buttons">
+            <button class="btn-time" onclick="Set10()">10s</button>
+            <button class="btn-time" onclick="Set30()">30s</button>
+            <button class="btn-time" onclick="Set60()">60s</button>
+        </div>
+        <div class="input-row">
+            <input type="number" id="customInput" placeholder="Enter seconds" min="1" />
+            <button class="btn-custom" onclick="SetCustom()" style="flex:0 0 80px;">Set</button>
+        </div>
+    </div>
+    
+    <div class="section">
+        <div class="section-title">Actions</div>
+        <button class="btn-start" onclick="StartWatchdog()">Start Watchdog</button>
+        <button class="btn-exit" onclick="ExitApp()">Exit</button>
+    </div>
+</div>
+
+<div class="msg" id="message">
+    <div style="font-size:48px;margin-bottom:15px;">OK</div>
+    <div id="msgText" style="font-size:18px;color:#333;"></div>
+</div>
+</body>
+</html>

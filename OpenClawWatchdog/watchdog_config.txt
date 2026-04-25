@@ -1,0 +1,2 @@
+# OpenClaw Watchdog Config
+CHECK_INTERVAL=5
